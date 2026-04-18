@@ -35,7 +35,7 @@ Add this repo as a Claude Code skill so your agent can query the SkillenAI API d
 
 ```bash
 # Clone the repo
-git clone https://github.com/skillenai/skillenai-api-skill.git
+git clone https://github.com/chiefastro/skillenai-api-skill.git
 
 # Add your credentials
 cp skillenai-api-skill/.env.example skillenai-api-skill/.env
