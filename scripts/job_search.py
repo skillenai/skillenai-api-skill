@@ -84,10 +84,10 @@ def search_jobs(url: str, key: str, body: dict) -> dict:
     return resp.json()
 
 
-def format_salary(hit: dict) -> str:
-    """Format salary range from a job hit."""
-    sal_min = hit.get("salaryMin")
-    sal_max = hit.get("salaryMax")
+def format_salary(source: dict) -> str:
+    """Format salary range from a job source document."""
+    sal_min = source.get("salaryMin")
+    sal_max = source.get("salaryMax")
     if sal_min and sal_max:
         return f"${sal_min:,}-${sal_max:,}"
     elif sal_max:
@@ -107,14 +107,15 @@ def print_results(results: dict, verbose: bool = False) -> None:
     print(f"{'=' * 70}")
 
     for i, hit in enumerate(hits, 1):
-        title = hit.get("title", "Untitled")
-        company = hit.get("company", "Unknown")
-        location = hit.get("location", "Not specified")
-        work_model = hit.get("workModel", "")
-        salary = format_salary(hit)
-        posted = hit.get("postedAt", "")[:10]
+        source = hit.get("source", {})
+        title = source.get("title", "Untitled")
+        company = source.get("company", "Unknown")
+        location = source.get("location", "Not specified")
+        work_model = source.get("workModel", "")
+        salary = format_salary(source)
+        posted = source.get("postedAt", "")[:10]
         score = hit.get("score", 0)
-        skills = hit.get("skills", [])
+        skills = source.get("skills", [])
 
         print(f"\n  {i}. {title}")
         print(f"     Company:  {company}")
