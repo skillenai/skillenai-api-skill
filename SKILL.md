@@ -389,8 +389,12 @@ The `scripts/` directory contains Python helpers that load credentials from `.en
 | `scripts/skill_analysis.py` | Analyze skill demand by role, compare roles |
 | `scripts/trend_analysis.py` | Topic trend time series, growth analysis |
 | `scripts/job_search.py` | Multi-signal job search with formatted output |
+| `scripts/download_jobs_paginated.py` | Paginated per-job download with arbitrary filter segments; handles 429 backoff |
+| `scripts/canonicalize_skills.py` | Collapse duplicate skill surface forms (case/punct/acronym variants) before aggregating — see SKI-165 |
 
 Run any script with `--help` for usage details.
+
+**Before aggregating skills by anything** (role, geo, seniority, time), pass per-job data through `canonicalize_skills.py` first. The entity resolver emits duplicate canonical names for skills like `RAG` vs `Retrieval-Augmented Generation (RAG)`, and aggregations will undercount or give contradictory signals otherwise. See SKI-165.
 
 ---
 
