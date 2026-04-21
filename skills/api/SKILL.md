@@ -2,7 +2,7 @@
 name: api
 description: Query the Skillenai Data Products API for labor market intelligence — skills, jobs, trends, and entity analytics
 user-invocable: true
-argument-hint: [query|jobs|skills|trends|eda|report] <details>
+argument-hint: [setup|query|jobs|skills|trends|eda|report] <details>
 allowed-tools: Bash, Read, Write, Glob, Grep, Agent
 ---
 
@@ -38,22 +38,19 @@ The data products API has six endpoint groups:
 
 ## Credentials
 
-Before invoking any curl example, load credentials into the shell. A helper ships with the plugin:
+Every bash block in this skill starts with this one-liner to load credentials:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-.}/scripts/load_env.sh"
+[ -z "$API_KEY" ] && [ -f ~/.skillenai/.env ] && set -a && . ~/.skillenai/.env && set +a; : "${API_URL:=https://api.skillenai.com}"; : "${APP_URL:=https://app.skillenai.com}"
 ```
 
-The helper resolves credentials in this precedence order:
+Resolution order: existing `$API_KEY` env var → `~/.skillenai/.env` → (silent) no key. The same key (`skn_live_…`) authenticates both `api.skillenai.com` and `app.skillenai.com`. The alerts flow (Flow 10) calls `$APP_URL`; every other flow calls `$API_URL`.
 
-1. `API_KEY` already set in the shell environment
-2. `~/.skillenai/.env` (the user-scoped location — persists across plugin upgrades)
-3. `$CLAUDE_PLUGIN_ROOT/.env` (only relevant for contributors editing the plugin in place)
-4. `./.env` in the current working directory
+Get a key at [app.skillenai.com](https://app.skillenai.com) → API Keys.
 
-Get an API key by registering at [app.skillenai.com](https://app.skillenai.com). The key (format `skn_live_…`) authenticates both `api.skillenai.com` and `app.skillenai.com`. The alerts flow (Flow 10) calls `$APP_URL`; every other flow calls `$API_URL`. `API_URL` and `APP_URL` default to production if unset.
+### First-time setup
 
-**Recommended:** save your key once at `~/.skillenai/.env`:
+If `~/.skillenai/.env` doesn't exist, run:
 
 ```bash
 mkdir -p ~/.skillenai
@@ -63,11 +60,28 @@ EOF
 chmod 600 ~/.skillenai/.env
 ```
 
+**Or — paste the key into this chat and let Claude save it.** When a user message contains a string matching `skn_live_[A-Za-z0-9_-]{10,}`, or the user explicitly says something like "here's my key" / "save this api key" / the skill is invoked with `setup`, follow this agent flow:
+
+1. Confirm what you're about to do: show the user a masked preview (first 9 chars + last 4, e.g. `skn_live_abc…wxyz`) and state the destination (`~/.skillenai/.env`, mode 0600).
+2. After the user confirms (or if they already said "save it"), write it with `umask 077` and `printf` — never echo the key to stdout. Do **not** use `cat << EOF` with the raw key inlined, as that would echo it into the Bash transcript.
+
+   ```bash
+   KEY='skn_live_...'   # put the key in a shell var in a single tool call
+   ( umask 077 && mkdir -p ~/.skillenai && printf 'API_KEY=%s\n' "$KEY" > ~/.skillenai/.env )
+   unset KEY
+   chmod 600 ~/.skillenai/.env
+   grep -c '^API_KEY=' ~/.skillenai/.env   # should print 1 — confirms without leaking the key
+   ```
+
+3. Confirm success with the masked preview again. Remind the user that the chat transcript contains the key they pasted — if they need that scrubbed, they should start a fresh chat after setup is done.
+
+**Security note for the user:** pasting the key in chat writes it into Anthropic's conversation logs. For strict workflows, set up the key in a terminal directly (the `mkdir` / `cat > …` block above) rather than via chat.
+
 ## Calling the API
 
 GET endpoints:
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-.}/scripts/load_env.sh"
+[ -z "$API_KEY" ] && [ -f ~/.skillenai/.env ] && set -a && . ~/.skillenai/.env && set +a; : "${API_URL:=https://api.skillenai.com}"; : "${APP_URL:=https://app.skillenai.com}"
 curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/counts" | python3 -m json.tool
 ```
 
@@ -92,6 +106,7 @@ Use `python3 -c "import sys,json; ..."` for inline analysis of JSON responses.
 
 Parse the user's intent from `$ARGUMENTS`:
 
+- `setup` → Run the first-time setup flow in the Credentials section (write the user's key to `~/.skillenai/.env`)
 - `eda` or `report` → Full EDA report flow (Flow 1)
 - `query <freeform>` → Ad-hoc API query (Flow 2)
 - `sql <query>` → SQL against Postgres (Flow 3)
@@ -111,7 +126,7 @@ Parse the user's intent from `$ARGUMENTS`:
 Run the automated EDA script:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-.}/scripts/load_env.sh"
+[ -z "$API_KEY" ] && [ -f ~/.skillenai/.env ] && set -a && . ~/.skillenai/.env && set +a; : "${API_URL:=https://api.skillenai.com}"; : "${APP_URL:=https://app.skillenai.com}"
 python "${CLAUDE_PLUGIN_ROOT:-.}/scripts/eda_report.py" --output "reports/eda-report-$(date +%Y%m%d).md"
 ```
 
@@ -120,7 +135,7 @@ After the script completes, read the report, summarize top 3-5 insights, and off
 If the script fails, fall back to **manual EDA**:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-.}/scripts/load_env.sh"
+[ -z "$API_KEY" ] && [ -f ~/.skillenai/.env ] && set -a && . ~/.skillenai/.env && set +a; : "${API_URL:=https://api.skillenai.com}"; : "${APP_URL:=https://app.skillenai.com}"
 
 # 1. Document counts
 curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/counts"
@@ -167,7 +182,7 @@ Write the report to `reports/` as markdown.
 ## Flow 3: SQL Queries (`sql`)
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-.}/scripts/load_env.sh"
+[ -z "$API_KEY" ] && [ -f ~/.skillenai/.env ] && set -a && . ~/.skillenai/.env && set +a; : "${API_URL:=https://api.skillenai.com}"; : "${APP_URL:=https://app.skillenai.com}"
 
 # Count entities by type
 curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
@@ -189,7 +204,7 @@ Use `GET /v1/catalog/postgres` to see all columns.
 ## Flow 4: OpenSearch Queries (`search`)
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-.}/scripts/load_env.sh"
+[ -z "$API_KEY" ] && [ -f ~/.skillenai/.env ] && set -a && . ~/.skillenai/.env && set +a; : "${API_URL:=https://api.skillenai.com}"; : "${APP_URL:=https://app.skillenai.com}"
 
 # Full-text search
 curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
@@ -207,7 +222,7 @@ curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
 ## Flow 5: Analytics (`trends` / `cooccurrence`)
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-.}/scripts/load_env.sh"
+[ -z "$API_KEY" ] && [ -f ~/.skillenai/.env ] && set -a && . ~/.skillenai/.env && set +a; : "${API_URL:=https://api.skillenai.com}"; : "${APP_URL:=https://app.skillenai.com}"
 
 # Document counts by source
 curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/counts"
@@ -226,7 +241,7 @@ curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/entity-cooccurrence?limi
 Use raw Cypher only when the dedicated endpoints (skills-by-role, jobs/search, resolution) don't cover the query. Common use cases:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-.}/scripts/load_env.sh"
+[ -z "$API_KEY" ] && [ -f ~/.skillenai/.env ] && set -a && . ~/.skillenai/.env && set +a; : "${API_URL:=https://api.skillenai.com}"; : "${APP_URL:=https://app.skillenai.com}"
 
 # Companies posting the most jobs for a skill
 curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
@@ -258,7 +273,7 @@ curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
 **This is the preferred way to analyze job skills.** The `skills-by-role` endpoint resolves role names via entity resolution (exact match then fuzzy fallback), so callers don't need exact canonical role labels. Accepts a single role or comma-separated aliases to merge into one aggregated skill profile.
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-.}/scripts/load_env.sh"
+[ -z "$API_KEY" ] && [ -f ~/.skillenai/.env ] && set -a && . ~/.skillenai/.env && set +a; : "${API_URL:=https://api.skillenai.com}"; : "${APP_URL:=https://app.skillenai.com}"
 
 # Single role — resolved via entity resolution (fuzzy OK)
 curl -s -H "X-API-Key: $API_KEY" \
@@ -294,7 +309,7 @@ For **comparative role analysis** (e.g., DS vs MLE vs AIE skills), fetch all rol
 Search job postings with multi-signal ranking:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-.}/scripts/load_env.sh"
+[ -z "$API_KEY" ] && [ -f ~/.skillenai/.env ] && set -a && . ~/.skillenai/.env && set +a; : "${API_URL:=https://api.skillenai.com}"; : "${APP_URL:=https://app.skillenai.com}"
 
 # Basic search
 curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
@@ -356,7 +371,7 @@ curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
 Resolve free-text names to canonical entity IDs:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-.}/scripts/load_env.sh"
+[ -z "$API_KEY" ] && [ -f ~/.skillenai/.env ] && set -a && . ~/.skillenai/.env && set +a; : "${API_URL:=https://api.skillenai.com}"; : "${APP_URL:=https://app.skillenai.com}"
 
 curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
   "$API_URL/v1/resolution/entities" \
@@ -386,7 +401,7 @@ The agent flow is **preview → create → (optional) run now**. Iterate on the 
 ### Step 1: Preview the query
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-.}/scripts/load_env.sh"
+[ -z "$API_KEY" ] && [ -f ~/.skillenai/.env ] && set -a && . ~/.skillenai/.env && set +a; : "${API_URL:=https://api.skillenai.com}"; : "${APP_URL:=https://app.skillenai.com}"
 
 curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
   "$APP_URL/alerts/preview" \
