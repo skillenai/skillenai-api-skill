@@ -6,8 +6,8 @@
     "name": "Jared Rand",
     "url": "https://github.com/chiefastro"
   },
-  "homepage": "https://github.com/chiefastro/skillenai-api-skill",
-  "repository": "https://github.com/chiefastro/skillenai-api-skill",
+  "homepage": "https://github.com/skillenai/skillenai-api-skill",
+  "repository": "https://github.com/skillenai/skillenai-api-skill",
   "license": "MIT",
   "keywords": ["api", "labor-market", "skills", "jobs", "analytics"]
 }
