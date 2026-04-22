@@ -34,7 +34,7 @@ If you're using the Claude Code plugin, you don't need to copy a key by hand —
 This repo is packaged as a Claude Code plugin. The recommended install is through the plugin marketplace:
 
 ```
-/plugin marketplace add chiefastro/skillenai-api-skill
+/plugin marketplace add skillenai/skillenai-api-skill
 /plugin install skillenai
 ```
 
@@ -77,7 +77,7 @@ Once installed, try things like:
 If you prefer not to use the plugin system, you can register the skill manually by cloning the inner `skills/api/` directory into a skills folder Claude Code scans:
 
 ```bash
-git clone https://github.com/chiefastro/skillenai-api-skill.git
+git clone https://github.com/skillenai/skillenai-api-skill.git
 ln -s "$(pwd)/skillenai-api-skill/skills/api" ~/.claude/skills/skillenai-api
 ```
 
