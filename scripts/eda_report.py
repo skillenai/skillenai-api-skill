@@ -24,12 +24,16 @@ from dotenv import load_dotenv
 
 
 def get_config() -> tuple[str, str]:
-    """Load API_URL and API_KEY from .env."""
+    """Load API_URL and API_KEY. Precedence: env > ~/.skillenai/.env > $CLAUDE_PLUGIN_ROOT/.env > cwd .env."""
+    load_dotenv(Path.home() / ".skillenai" / ".env")
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if plugin_root:
+        load_dotenv(Path(plugin_root) / ".env")
     load_dotenv()
     url = os.getenv("API_URL", "https://api.skillenai.com").rstrip("/")
     key = os.getenv("API_KEY", "")
     if not key:
-        print("ERROR: API_KEY not set. Copy .env.example to .env and add your key.")
+        print("ERROR: API_KEY not set. Put it in ~/.skillenai/.env or export API_KEY.")
         sys.exit(1)
     return url, key
 

@@ -1,12 +1,14 @@
 ---
-name: skillenai-api
+name: api
 description: Query the Skillenai Data Products API for labor market intelligence — skills, jobs, trends, and entity analytics
 user-invocable: true
-argument-hint: [query|jobs|skills|trends|eda|report] <details>
+argument-hint: [setup|query|jobs|skills|trends|eda|report] <details>
 allowed-tools: Bash, Read, Write, Glob, Grep, Agent
 ---
 
 # Skillenai Data Products API Skill
+
+Invoke as `/skillenai:api` (when installed via `/plugin install skillenai`).
 
 This skill queries the Skillenai Data Products API for labor market intelligence. It covers skills, jobs, trends, entity analytics, and knowledge graph traversal.
 
@@ -36,40 +38,60 @@ The data products API has six endpoint groups:
 
 ## Credentials
 
-Store your API key in a `.env` file at the project root:
+The skill calls the API through a wrapper script (`scripts/api.py`) that loads credentials in its own process. **The API key is never visible to the agent's shell, never appears in `curl` argv, and never enters the conversation transcript.** This is intentional and load-bearing — see the Security section at the end.
 
-```
-API_URL=https://api.skillenai.com
-APP_URL=https://app.skillenai.com
-API_KEY=skn_live_your_key_here
-```
+### First-run check
 
-The same `API_KEY` authenticates both hosts — it's a Skillenai API key generated on the API Keys page of `app.skillenai.com`. The alerts flow (Flow 10) calls `$APP_URL`; every other flow calls `$API_URL`.
-
-Copy `.env.example` and fill in your key. Get an API key by registering at [app.skillenai.com](https://app.skillenai.com).
-
-Load credentials before making calls:
+Before running any flow other than `setup`, verify credentials exist:
 
 ```bash
-source .env
+[ -n "$API_KEY" ] || [ -f ~/.skillenai/.env ]
 ```
+
+If neither is set, **stop and tell the user**:
+
+> No Skillenai API key found. Run `/skillenai:api setup` to authorize — it'll open a browser, you sign in or create an account, and the key gets saved automatically. Takes about 30 seconds.
+
+Do not attempt the requested query. Do not offer to write the key for the user. The setup flow is the only documented automated path.
+
+### Setup flow
+
+When `$ARGUMENTS` starts with `setup` (or is just `setup`):
+
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/oauth_setup.py"
+```
+
+This opens a browser to `app.skillenai.com/activate`, the user clicks Allow, and the script writes the issued key to `~/.skillenai/.env` with mode 0600. On exit 0, suggest a next step (e.g. "Try `/skillenai:api jobs <query>` to test it."). On exit 1, surface the script's stderr — it is already sanitized and will not contain the key.
+
+### If the user pastes a key in chat
+
+If the user's message contains a string matching `skn_live_[A-Za-z0-9_-]{10,}`, do **not** save it via any agent-mediated flow. Respond:
+
+> Looks like you pasted an API key in chat. For your security, run `/skillenai:api setup` instead — that authorizes via browser without putting the key in the conversation transcript. If you specifically want to use the key you just pasted, save it to `~/.skillenai/.env` yourself in a terminal (one line: `API_KEY=skn_live_…`, then `chmod 600`) — that's a manual one-time step that keeps the key out of chat logs.
 
 ## Calling the API
 
-GET endpoints:
+Every API call goes through the wrapper. The wrapper resolves the API key, picks the right host, and signs the request:
+
 ```bash
-source .env
-curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/counts" | python3 -m json.tool
+python "${CLAUDE_PLUGIN_ROOT}/scripts/api.py" GET /v1/analytics/counts | python3 -m json.tool
 ```
 
-POST endpoints:
+POST with a JSON body (pass it as the third argument):
+
 ```bash
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/query/sql" \
-  -d '{"sql": "SELECT count(*) AS n FROM skillenai.entities"}' | python3 -m json.tool
+python "${CLAUDE_PLUGIN_ROOT}/scripts/api.py" POST /v1/query/sql \
+  '{"sql": "SELECT count(*) AS n FROM skillenai.entities"}' | python3 -m json.tool
 ```
 
-Use `python3 -c "import sys,json; ..."` for inline analysis of JSON responses.
+Calls to the alerts host (`app.skillenai.com`) take `--host app`:
+
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/api.py" GET /alerts --host app | python3 -m json.tool
+```
+
+Use `python3 -c "import sys,json; …"` for inline analysis of JSON responses.
 
 ## Topics vs Skills — Critical Distinction
 
@@ -83,6 +105,7 @@ Use `python3 -c "import sys,json; ..."` for inline analysis of JSON responses.
 
 Parse the user's intent from `$ARGUMENTS`:
 
+- `setup` → Run the OAuth setup flow described above (`scripts/oauth_setup.py`)
 - `eda` or `report` → Full EDA report flow (Flow 1)
 - `query <freeform>` → Ad-hoc API query (Flow 2)
 - `sql <query>` → SQL against Postgres (Flow 3)
@@ -95,6 +118,8 @@ Parse the user's intent from `$ARGUMENTS`:
 - `alerts <anything>`, `subscribe <query>`, or "email me when X" → Alerts authoring (Flow 10)
 - If unclear, ask the user what they want to explore
 
+For every case other than `setup`, run the first-run check first (see above).
+
 ---
 
 ## Flow 1: Full EDA Report (`eda` / `report`)
@@ -102,8 +127,7 @@ Parse the user's intent from `$ARGUMENTS`:
 Run the automated EDA script:
 
 ```bash
-source .env
-python scripts/eda_report.py --output reports/eda-report-$(date +%Y%m%d).md
+python "${CLAUDE_PLUGIN_ROOT:-.}/scripts/eda_report.py" --output "reports/eda-report-$(date +%Y%m%d).md"
 ```
 
 After the script completes, read the report, summarize top 3-5 insights, and offer to dig deeper.
@@ -111,24 +135,23 @@ After the script completes, read the report, summarize top 3-5 insights, and off
 If the script fails, fall back to **manual EDA**:
 
 ```bash
-source .env
+WRAP="${CLAUDE_PLUGIN_ROOT}/scripts/api.py"
 
 # 1. Document counts
-curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/counts"
+python "$WRAP" GET /v1/analytics/counts
 
 # 2. Topic trends
-curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/topic-trends?limit=50"
+python "$WRAP" GET "/v1/analytics/topic-trends?limit=50"
 
 # 3. Entity co-occurrence
-curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/entity-cooccurrence?limit=50"
+python "$WRAP" GET "/v1/analytics/entity-cooccurrence?limit=50"
 
 # 4. Skills by role
-curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/skills-by-role"
+python "$WRAP" GET /v1/analytics/skills-by-role
 
 # 5. Entity counts by type
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/query/sql" \
-  -d '{"sql": "SELECT entity_type, count(*) AS n FROM skillenai.entities GROUP BY entity_type ORDER BY n DESC"}'
+python "$WRAP" POST /v1/query/sql \
+  '{"sql": "SELECT entity_type, count(*) AS n FROM skillenai.entities GROUP BY entity_type ORDER BY n DESC"}'
 ```
 
 Write the report to `reports/` as markdown.
@@ -158,39 +181,35 @@ Write the report to `reports/` as markdown.
 ## Flow 3: SQL Queries (`sql`)
 
 ```bash
-source .env
+WRAP="${CLAUDE_PLUGIN_ROOT}/scripts/api.py"
 
 # Count entities by type
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/query/sql" \
-  -d '{"sql": "SELECT entity_type, count(*) AS n FROM skillenai.entities GROUP BY entity_type ORDER BY n DESC"}'
+python "$WRAP" POST /v1/query/sql \
+  '{"sql": "SELECT entity_type, count(*) AS n FROM skillenai.entities GROUP BY entity_type ORDER BY n DESC"}'
 
 # Find entities by name
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/query/sql" \
-  -d '{"sql": "SELECT entity_id, canonical_name, entity_type FROM skillenai.entities WHERE canonical_name ILIKE $1 LIMIT 20", "params": ["%OpenAI%"]}'
+python "$WRAP" POST /v1/query/sql \
+  '{"sql": "SELECT entity_id, canonical_name, entity_type FROM skillenai.entities WHERE canonical_name ILIKE $1 LIMIT 20", "params": ["%OpenAI%"]}'
 ```
 
 **Postgres tables:** `skillenai.entities`, `skillenai.documents`, `skillenai.document_entity_links`, `skillenai.relationships`
 
-Use `GET /v1/catalog/postgres` to see all columns.
+Use `python "$WRAP" GET /v1/catalog/postgres` to see all columns.
 
 ---
 
 ## Flow 4: OpenSearch Queries (`search`)
 
 ```bash
-source .env
+WRAP="${CLAUDE_PLUGIN_ROOT}/scripts/api.py"
 
 # Full-text search
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/query/search" \
-  -d '{"query": {"query": {"match": {"title": "machine learning"}}, "size": 20}}'
+python "$WRAP" POST /v1/query/search \
+  '{"query": {"query": {"match": {"title": "machine learning"}}, "size": 20}}'
 
 # Aggregation: top skills in job postings (via nested entity agg)
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/query/search" \
-  -d '{"query": {"size": 0, "query": {"term": {"sourceType": "jobs"}}, "aggs": {"skill_entities": {"nested": {"path": "entities"}, "aggs": {"skills_only": {"filter": {"term": {"entities.resolved.entityType": "skill"}}, "aggs": {"top_skills": {"terms": {"field": "entities.resolved.canonicalName.keyword", "size": 50}}}}}}}}, "indices": ["prod-enriched-jobs"]}'
+python "$WRAP" POST /v1/query/search \
+  '{"query": {"size": 0, "query": {"term": {"sourceType": "jobs"}}, "aggs": {"skill_entities": {"nested": {"path": "entities"}, "aggs": {"skills_only": {"filter": {"term": {"entities.resolved.entityType": "skill"}}, "aggs": {"top_skills": {"terms": {"field": "entities.resolved.canonicalName.keyword", "size": 50}}}}}}}}, "indices": ["prod-enriched-jobs"]}'
 ```
 
 ---
@@ -198,16 +217,16 @@ curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
 ## Flow 5: Analytics (`trends` / `cooccurrence`)
 
 ```bash
-source .env
+WRAP="${CLAUDE_PLUGIN_ROOT}/scripts/api.py"
 
 # Document counts by source
-curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/counts"
+python "$WRAP" GET /v1/analytics/counts
 
 # Topic trends over time
-curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/topic-trends?limit=50"
+python "$WRAP" GET "/v1/analytics/topic-trends?limit=50"
 
 # Entity co-occurrence
-curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/entity-cooccurrence?limit=50"
+python "$WRAP" GET "/v1/analytics/entity-cooccurrence?limit=50"
 ```
 
 ---
@@ -217,22 +236,19 @@ curl -s -H "X-API-Key: $API_KEY" "$API_URL/v1/analytics/entity-cooccurrence?limi
 Use raw Cypher only when the dedicated endpoints (skills-by-role, jobs/search, resolution) don't cover the query. Common use cases:
 
 ```bash
-source .env
+WRAP="${CLAUDE_PLUGIN_ROOT}/scripts/api.py"
 
 # Companies posting the most jobs for a skill
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/query/graph" \
-  -d '{"cypher": "MATCH (j:job)-[:REQUIRES]->(s:skill), (j)-[:POSTED_BY]->(c:company) WHERE s.name = '\''Python'\'' RETURN c.name AS company, count(*) AS jobs ORDER BY jobs DESC", "limit": 20}'
+python "$WRAP" POST /v1/query/graph \
+  '{"cypher": "MATCH (j:job)-[:REQUIRES]->(s:skill), (j)-[:POSTED_BY]->(c:company) WHERE s.name = '\''Python'\'' RETURN c.name AS company, count(*) AS jobs ORDER BY jobs DESC", "limit": 20}'
 
 # Skills co-occurring with a specific skill
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/query/graph" \
-  -d '{"cypher": "MATCH (j:job)-[:REQUIRES]->(s1:skill), (j)-[:REQUIRES]->(s2:skill) WHERE s1.name = '\''Python'\'' AND s1.id <> s2.id RETURN s2.name AS co_skill, count(*) AS overlap ORDER BY overlap DESC", "limit": 20}'
+python "$WRAP" POST /v1/query/graph \
+  '{"cypher": "MATCH (j:job)-[:REQUIRES]->(s1:skill), (j)-[:REQUIRES]->(s2:skill) WHERE s1.name = '\''Python'\'' AND s1.id <> s2.id RETURN s2.name AS co_skill, count(*) AS overlap ORDER BY overlap DESC", "limit": 20}'
 
 # Entity mentions in scholarly papers
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/query/graph" \
-  -d '{"cypher": "MATCH (d:document)-[:MENTIONS]->(e:skill) WHERE d.source_type = '\''scholarly'\'' RETURN e.name AS skill, count(*) AS mentions ORDER BY mentions DESC", "limit": 30}'
+python "$WRAP" POST /v1/query/graph \
+  '{"cypher": "MATCH (d:document)-[:MENTIONS]->(e:skill) WHERE d.source_type = '\''scholarly'\'' RETURN e.name AS skill, count(*) AS mentions ORDER BY mentions DESC", "limit": 30}'
 ```
 
 **Graph query rules:**
@@ -249,15 +265,13 @@ curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
 **This is the preferred way to analyze job skills.** The `skills-by-role` endpoint resolves role names via entity resolution (exact match then fuzzy fallback), so callers don't need exact canonical role labels. Accepts a single role or comma-separated aliases to merge into one aggregated skill profile.
 
 ```bash
-source .env
+WRAP="${CLAUDE_PLUGIN_ROOT}/scripts/api.py"
 
 # Single role — resolved via entity resolution (fuzzy OK)
-curl -s -H "X-API-Key: $API_KEY" \
-  "$API_URL/v1/analytics/skills-by-role?role=Data+Scientist"
+python "$WRAP" GET "/v1/analytics/skills-by-role?role=Data+Scientist"
 
 # Comma-separated aliases — merged into a single skill profile
-curl -s -H "X-API-Key: $API_KEY" \
-  "$API_URL/v1/analytics/skills-by-role?role=ML+Engineer,Machine+Learning+Engineer"
+python "$WRAP" GET "/v1/analytics/skills-by-role?role=ML+Engineer,Machine+Learning+Engineer"
 ```
 
 **Response format:**
@@ -285,17 +299,15 @@ For **comparative role analysis** (e.g., DS vs MLE vs AIE skills), fetch all rol
 Search job postings with multi-signal ranking:
 
 ```bash
-source .env
+WRAP="${CLAUDE_PLUGIN_ROOT}/scripts/api.py"
 
 # Basic search
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/jobs/search" \
-  -d '{"query": "machine learning engineer NLP deep learning", "size": 20}'
+python "$WRAP" POST /v1/jobs/search \
+  '{"query": "machine learning engineer NLP deep learning", "size": 20}'
 
 # With all ranking signals
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/jobs/search" \
-  -d '{
+python "$WRAP" POST /v1/jobs/search \
+  '{
     "query": "AI engineer NLP LLMs RAG Python",
     "seniority": "senior",
     "min_salary": 180000,
@@ -305,9 +317,8 @@ curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
   }'
 
 # With skill entity boosts (resolve names first via /v1/resolution/entities)
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/jobs/search" \
-  -d '{
+python "$WRAP" POST /v1/jobs/search \
+  '{
     "query": "AI engineer",
     "skill_boosts": [
       {"entity_id": "175c2b707caa6eb1", "weight": 10.0},
@@ -318,9 +329,8 @@ curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
   }'
 
 # With geo-distance (lat, lon + radius)
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/jobs/search" \
-  -d '{
+python "$WRAP" POST /v1/jobs/search \
+  '{
     "query": "software engineer",
     "location": [37.77, -122.42],
     "location_radius": "100km",
@@ -347,11 +357,10 @@ curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
 Resolve free-text names to canonical entity IDs:
 
 ```bash
-source .env
+WRAP="${CLAUDE_PLUGIN_ROOT}/scripts/api.py"
 
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$API_URL/v1/resolution/entities" \
-  -d '{
+python "$WRAP" POST /v1/resolution/entities \
+  '{
     "names": [
       {"name": "Python", "entity_type": "skill"},
       {"name": "Google", "entity_type": "company"},
@@ -370,18 +379,17 @@ Use this to resolve skill names to entity IDs for `skill_boosts` in `/v1/jobs/se
 
 ## Flow 10: Alerts (`alerts` / "email me when …")
 
-User alert subscriptions run a saved Data Products query on a cadence and email the results. CRUD lives on **`app.skillenai.com`**, not the data products API — but the same `X-API-Key` authenticates both. Full endpoint reference in `docs/endpoints/alerts.md`.
+User alert subscriptions run a saved Data Products query on a cadence and email the results. CRUD lives on **`app.skillenai.com`**, not the data products API — but the same `X-API-Key` authenticates both. Pass `--host app` to the wrapper. Full endpoint reference in `${CLAUDE_PLUGIN_ROOT}/docs/endpoints/alerts.md`.
 
 The agent flow is **preview → create → (optional) run now**. Iterate on the preview until the credit cost and subject line look right, then commit.
 
 ### Step 1: Preview the query
 
 ```bash
-source .env
+WRAP="${CLAUDE_PLUGIN_ROOT}/scripts/api.py"
 
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$APP_URL/alerts/preview" \
-  -d '{
+python "$WRAP" POST /alerts/preview --host app \
+  '{
     "name": "Senior ML jobs",
     "source_query": {
       "endpoint": "/v1/jobs/search",
@@ -400,9 +408,8 @@ The response returns `item_count`, the `rendered.subject` the recipient will see
 ### Step 2: Create the alert
 
 ```bash
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$APP_URL/alerts" \
-  -d '{
+python "$WRAP" POST /alerts --host app \
+  '{
     "name": "Senior ML jobs",
     "source_query": {
       "endpoint": "/v1/jobs/search",
@@ -419,26 +426,27 @@ Returns 201 with an `AlertInfo` row (id, next_run_at, etc.). **Always pass `name
 
 ```bash
 ALERT_ID="<id from step 2>"
-curl -s -X POST -H "X-API-Key: $API_KEY" "$APP_URL/alerts/$ALERT_ID/run"
+python "$WRAP" POST "/alerts/$ALERT_ID/run" --host app
 ```
 
-The run is asynchronous. Poll `GET /alerts/$ALERT_ID` until `last_run_at` advances (typically 30–60s).
+The run is asynchronous. Poll `GET /alerts/$ALERT_ID --host app` until `last_run_at` advances (typically 30–60s).
 
 ### Step 4: Manage
 
 ```bash
+WRAP="${CLAUDE_PLUGIN_ROOT}/scripts/api.py"
+
 # List
-curl -s -H "X-API-Key: $API_KEY" "$APP_URL/alerts"
+python "$WRAP" GET /alerts --host app
 
 # Read one
-curl -s -H "X-API-Key: $API_KEY" "$APP_URL/alerts/$ALERT_ID"
+python "$WRAP" GET "/alerts/$ALERT_ID" --host app
 
 # Partial update — pause, rename, change cadence, etc.
-curl -s -X PATCH -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  "$APP_URL/alerts/$ALERT_ID" -d '{"is_active": false}'
+python "$WRAP" PATCH "/alerts/$ALERT_ID" --host app '{"is_active": false}'
 
 # Delete (204)
-curl -s -X DELETE -H "X-API-Key: $API_KEY" "$APP_URL/alerts/$ALERT_ID"
+python "$WRAP" DELETE "/alerts/$ALERT_ID" --host app
 ```
 
 **Source query scope:** any Data Products API endpoint the caller's key can hit is fair game for `source_query.endpoint`. The scheduled run authorises and bills against that key exactly like a direct call would.
@@ -480,10 +488,12 @@ curl -s -X DELETE -H "X-API-Key: $API_KEY" "$APP_URL/alerts/$ALERT_ID"
 
 ## Helper Scripts
 
-The `scripts/` directory contains Python helpers that load credentials from `.env` and call the API. All require `requests` and `python-dotenv` (`pip install requests python-dotenv`).
+The `scripts/` directory (at `${CLAUDE_PLUGIN_ROOT}/scripts/`) contains Python helpers that resolve credentials the same way the wrapper does (env → `~/.skillenai/.env` → plugin `.env` → cwd `.env`). All require `requests` and `python-dotenv` (`pip install requests python-dotenv`).
 
 | Script | Purpose |
 |--------|---------|
+| `scripts/oauth_setup.py` | Browser-based OAuth setup that writes `~/.skillenai/.env` |
+| `scripts/api.py` | Authenticated request wrapper (used by every flow above) |
 | `scripts/eda_report.py` | Generate a comprehensive EDA markdown report |
 | `scripts/skill_analysis.py` | Analyze skill demand by role, compare roles |
 | `scripts/trend_analysis.py` | Topic trend time series, growth analysis |
@@ -513,12 +523,25 @@ Run any script with `--help` for usage details.
 
 ---
 
+## Security
+
+The API key is a long-lived credential. Once leaked, it is valid until the user notices and revokes it on `app.skillenai.com` → API Keys. The skill is structured so the agent **cannot** accidentally leak it — but agents fail in surprising ways, so these are explicit hard rules:
+
+- **NEVER** print the contents of `~/.skillenai/.env`. No `cat`, `head`, `less`, `tail`, `tee`, `od`, `xxd`, or anything else that streams the file. The user can open it in their editor if they need to read it.
+- **NEVER** run `echo $API_KEY`, `env | grep -i api`, `printenv API_KEY`, `set | grep API`, or anything else that surfaces an env var named `API_KEY`. The wrapper script is the only place `API_KEY` should be loaded into a process; the agent's bash does not need it.
+- **NEVER** invoke `curl` directly with `-H "X-API-Key: …"`. Always go through `scripts/api.py`.
+- **NEVER** use `curl -v`, `curl --trace`, `curl --trace-ascii`, or any verbose/trace flag — these echo request headers including `X-API-Key`.
+- **NEVER** add `--debug`, `set -x`, `bash -x`, or shell tracing while a flow that touches credentials is running.
+- **If the user asks the agent to show them their key**, respond: "For security, I won't print your key. You can read `~/.skillenai/.env` yourself if you need it. To rotate, revoke the old key on app.skillenai.com → API Keys, then run `/skillenai:api setup` for a new one."
+- **If the user pastes a `skn_live_…` string into chat**, follow the "If the user pastes a key in chat" guidance above — point them at `setup`, do NOT save the pasted key on their behalf.
+
+---
+
 ## Important Notes
 
 1. **Rate limits:** 120 req/min for READ tier, 60/min for SEARCH, 20/min for ANALYTICS, 10/min for QUERY
 2. **Credits:** API calls consume credits. Check `X-Credits-Remaining` response header.
 3. **Analytics latency:** Athena-backed endpoints may take several seconds
-4. **Always source credentials** before making API calls
-5. **Use python3 for aggregation** — pipe curl output to python3 for counting, sorting, and cross-tabulating
-6. **Schema discovery:** Check `GET /v1/catalog` before writing queries to verify table/column names
-7. **Prefer dedicated endpoints** over raw queries: `skills-by-role` over Cypher, `jobs/search` over DSL, `resolution/entities` over SQL lookups
+4. **Use python3 for aggregation** — pipe wrapper output to python3 for counting, sorting, and cross-tabulating
+5. **Schema discovery:** Check `GET /v1/catalog` before writing queries to verify table/column names
+6. **Prefer dedicated endpoints** over raw queries: `skills-by-role` over Cypher, `jobs/search` over DSL, `resolution/entities` over SQL lookups

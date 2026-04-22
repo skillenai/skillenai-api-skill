@@ -1,0 +1,13 @@
+{
+  "name": "skillenai",
+  "version": "0.1.0",
+  "description": "Query the Skillenai Data Products API for labor market intelligence — skills, jobs, trends, and entity analytics",
+  "author": {
+    "name": "Jared Rand",
+    "url": "https://github.com/chiefastro"
+  },
+  "homepage": "https://github.com/chiefastro/skillenai-api-skill",
+  "repository": "https://github.com/chiefastro/skillenai-api-skill",
+  "license": "MIT",
+  "keywords": ["api", "labor-market", "skills", "jobs", "analytics"]
+}
