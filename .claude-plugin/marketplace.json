@@ -6,7 +6,10 @@
   "plugins": [
     {
       "name": "skillenai",
-      "source": ".",
+      "source": {
+        "source": "github",
+        "repo": "skillenai/skillenai-api-skill"
+      },
       "description": "Query the Skillenai Data Products API for labor market intelligence — skills, jobs, trends, and entity analytics",
       "version": "0.1.0",
       "author": {
