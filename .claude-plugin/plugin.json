@@ -1,6 +1,6 @@
 {
   "name": "skillenai",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Query the Skillenai Data Products API for labor market intelligence — skills, jobs, trends, and entity analytics",
   "author": {
     "name": "Jared Rand",

@@ -513,3 +513,22 @@ Write the final report to `reports/job-search-<date>.md` with:
 2. Market fit analysis (coverage % per role, top gaps)
 3. Ranked job list with clickable links and per-job skill overlap analysis
 4. Aggregate skill gap analysis across top results
+
+### Open the report
+
+After writing the report, open it in the user's preferred markdown viewer so they can review it immediately. Try editors in this order, using the first one on `$PATH`:
+
+```bash
+REPORT="reports/job-search-$(date +%Y-%m-%d).md"
+if command -v cursor >/dev/null 2>&1; then
+  cursor "$REPORT"
+elif command -v code >/dev/null 2>&1; then
+  code "$REPORT"
+elif [ -n "$EDITOR" ]; then
+  "$EDITOR" "$REPORT"
+else
+  open "$REPORT" 2>/dev/null || xdg-open "$REPORT" 2>/dev/null || echo "Report written to $REPORT"
+fi
+```
+
+If the user has mentioned a preferred tool earlier in the conversation (e.g. VS Code, Cursor, Obsidian, `glow`, `bat`), use that instead of the fallback chain. If nothing opens successfully, print the path so they can open it themselves.
