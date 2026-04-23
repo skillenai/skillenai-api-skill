@@ -1,0 +1,20 @@
+{
+  "name": "skillenai-api",
+  "owner": {
+    "name": "Jared Rand"
+  },
+  "plugins": [
+    {
+      "name": "skillenai",
+      "source": ".",
+      "description": "Query the Skillenai Data Products API for labor market intelligence — skills, jobs, trends, and entity analytics",
+      "version": "0.1.0",
+      "author": {
+        "name": "Jared Rand"
+      },
+      "homepage": "https://github.com/skillenai/skillenai-api-skill",
+      "repository": "https://github.com/skillenai/skillenai-api-skill",
+      "license": "MIT"
+    }
+  ]
+}

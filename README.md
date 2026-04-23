@@ -35,10 +35,13 @@ This repo is packaged as a Claude Code plugin. The recommended install is throug
 
 ```
 /plugin marketplace add skillenai/skillenai-api-skill
-/plugin install skillenai
 ```
 
-Restart Claude Code (or `/reload-plugins`). The skill registers as **`/skillenai:api`** — note the colon, which is standard namespacing for plugin skills.
+```
+/plugin install skillenai@skillenai-api
+```
+
+Run these as two separate commands — Claude Code slash commands are one per line. Restart Claude Code (or `/reload-plugins`) after installing. The skill registers as **`/skillenai:api`** — note the colon, which is standard namespacing for plugin skills.
 
 ### Credentials
 
