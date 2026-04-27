@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 
 
 DEFAULT_API_URL = "https://api.skillenai.com"
-DEFAULT_APP_URL = "https://app.skillenai.com"
+DEFAULT_APP_URL = "https://app.skillenai.com/api/backend"
 
 
 def load_credentials() -> tuple[str, str, str]:

@@ -26,7 +26,7 @@ if [ -z "${API_KEY:-}" ]; then
 fi
 
 : "${API_URL:=https://api.skillenai.com}"
-: "${APP_URL:=https://app.skillenai.com}"
+: "${APP_URL:=https://app.skillenai.com/api/backend}"
 export API_URL APP_URL
 [ -n "${API_KEY:-}" ] && export API_KEY
 

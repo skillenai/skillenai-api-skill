@@ -17,7 +17,7 @@ This skill queries the Skillenai Data Products API for labor market intelligence
 Two hosts, one API key:
 
 - **`https://api.skillenai.com`** — read-only data products (search, analytics, SQL, graph, resolution).
-- **`https://app.skillenai.com`** — user-facing account surface. Alerts CRUD lives here; the scheduled queries it runs hit `api.skillenai.com` with the same key.
+- **`https://app.skillenai.com/api/backend`** — account surface (alerts CRUD); the scheduled queries it runs hit `api.skillenai.com` with the same key.
 
 The data products API has six endpoint groups:
 
@@ -30,11 +30,11 @@ The data products API has six endpoint groups:
 | Catalog | `GET /v1/catalog`, `GET /v1/catalog/{projection}` | Schema introspection |
 | Query | `POST /v1/query/sql`, `athena`, `graph`, `search` | Direct query against 4 data projections |
 
-`app.skillenai.com` adds one more group (see Flow 10):
+The account surface adds one more group (see Flow 10):
 
 | Group | Key Endpoints | Host | Purpose |
 |-------|-----------|------|---------|
-| Alerts | `POST /alerts/preview`, `POST /alerts`, `GET /alerts`, `POST /alerts/{id}/run`, `PATCH /alerts/{id}`, `DELETE /alerts/{id}` | `app.skillenai.com` | Create and manage scheduled email alerts that run any data products query on a cadence |
+| Alerts | `POST /alerts/preview`, `POST /alerts`, `GET /alerts`, `POST /alerts/{id}/run`, `PATCH /alerts/{id}`, `DELETE /alerts/{id}` | `app.skillenai.com/api/backend` | Create and manage scheduled email alerts that run any data products query on a cadence |
 
 ## Credentials
 
@@ -85,7 +85,7 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/api.py" POST /v1/query/sql \
   '{"sql": "SELECT count(*) AS n FROM skillenai.entities"}' | python3 -m json.tool
 ```
 
-Calls to the alerts host (`app.skillenai.com`) take `--host app`:
+Calls to the alerts host (`app.skillenai.com/api/backend`) take `--host app`:
 
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/scripts/api.py" GET /alerts --host app | python3 -m json.tool
@@ -379,7 +379,7 @@ Use this to resolve skill names to entity IDs for `skill_boosts` in `/v1/jobs/se
 
 ## Flow 10: Alerts (`alerts` / "email me when …")
 
-User alert subscriptions run a saved Data Products query on a cadence and email the results. CRUD lives on **`app.skillenai.com`**, not the data products API — but the same `X-API-Key` authenticates both. Pass `--host app` to the wrapper. Full endpoint reference in `${CLAUDE_PLUGIN_ROOT}/docs/endpoints/alerts.md`.
+User alert subscriptions run a saved Data Products query on a cadence and email the results. CRUD lives at **`app.skillenai.com/api/backend`**, not the data products API — but the same `X-API-Key` authenticates both. Pass `--host app` to the wrapper. Full endpoint reference in `${CLAUDE_PLUGIN_ROOT}/docs/endpoints/alerts.md`.
 
 The agent flow is **preview → create → (optional) run now**. Iterate on the preview until the credit cost and subject line look right, then commit.
 

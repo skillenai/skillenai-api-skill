@@ -1,14 +1,14 @@
 # Alerts Endpoints
 
-User alert subscriptions run scheduled Data Products API queries and email the results. Alerts CRUD is served from `app.skillenai.com`, not `api.skillenai.com`. The same `X-API-Key` authenticates both hosts, and the scheduled query runs with the caller's key so billing and endpoint authorization behave the same as direct API calls.
+User alert subscriptions run scheduled Data Products API queries and email the results. Alerts CRUD is served from `app.skillenai.com/api/backend`, not `api.skillenai.com`. The same `X-API-Key` authenticates both hosts, and the scheduled query runs with the caller's key so billing and endpoint authorization behave the same as direct API calls.
 
 ## Host
 
 ```
-https://app.skillenai.com
+https://app.skillenai.com/api/backend
 ```
 
-The data products API lives on `api.skillenai.com`; alerts CRUD lives on `app.skillenai.com`. Do not confuse the two hosts.
+The data products API lives on `api.skillenai.com`; alerts CRUD lives on `app.skillenai.com/api/backend`. Do not confuse the two hosts.
 
 ## Authentication
 

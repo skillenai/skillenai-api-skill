@@ -31,11 +31,11 @@ Edit `.env` and paste your API key:
 
 ```
 API_URL=https://api.skillenai.com
-APP_URL=https://app.skillenai.com
+APP_URL=https://app.skillenai.com/api/backend
 API_KEY=skn_live_your_actual_key_here
 ```
 
-`API_URL` is the data products API (search, analytics, SQL). `APP_URL` is the app host (alerts CRUD). The same `API_KEY` authenticates both.
+`API_URL` is the data products API (search, analytics, SQL). `APP_URL` is the account surface (alerts CRUD). The same `API_KEY` authenticates both.
 
 ## Step 5: Make Your First Request
 
