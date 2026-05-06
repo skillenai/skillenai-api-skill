@@ -113,6 +113,7 @@ pip install requests python-dotenv
 | `scripts/trend_analysis.py` | Topic trend time series and growth analysis |
 | `scripts/job_search.py` | Multi-signal job search with formatted output |
 | `scripts/blog_upload.py` | Upload a cover image for a blog post (presign + PUT) |
+| `scripts/scholarly_blog_phrase_ratio.py` | Per-skill academic-depth ratio (scholarly / scholarly+blog match_phrase counts) — 9s-throttled, resumable |
 
 Run any script with `--help` for usage.
 
