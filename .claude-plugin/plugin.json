@@ -1,6 +1,6 @@
 {
   "name": "skillenai",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Skillenai Claude plugin — query the Data Products API, find jobs, and author blog posts using your Skillenai API key",
   "author": {
     "name": "Jared Rand",
