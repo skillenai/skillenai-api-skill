@@ -114,6 +114,7 @@ pip install requests python-dotenv
 | `scripts/job_search.py` | Multi-signal job search with formatted output |
 | `scripts/blog_upload.py` | Upload a cover image for a blog post (presign + PUT) |
 | `scripts/scholarly_blog_phrase_ratio.py` | Per-skill academic-depth ratio (scholarly / scholarly+blog match_phrase counts) — 9s-throttled, resumable |
+| `scripts/phrase_prevalence.py` | Document-prevalence of a long concept list across one or more indices, batched via a `filters` aggregation (one request per ~10 concepts); supports multi-spelling OR-groups |
 
 Run any script with `--help` for usage.
 
