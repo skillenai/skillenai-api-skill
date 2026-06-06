@@ -518,6 +518,7 @@ The `scripts/` directory (at `${CLAUDE_PLUGIN_ROOT}/scripts/`) contains Python h
 | `scripts/canonicalize_skills.py` | Collapse duplicate skill surface forms (case/punct/acronym variants) before aggregating |
 | `scripts/entity_bridge_analysis.py` | Graph-native helpers: bridge-document density, co-required products in jobs, internal hiring stacks, top co-occurring entities. Uses Cypher. |
 | `scripts/phrase_prevalence.py` | "What fraction of jobs / blogs / news mention X?" for a long list of X. Packs many `match_phrase` concepts into one `filters` aggregation per request (chunked under the WAF body limit) so a 90-concept sweep is a handful of calls, not 90 per index. Supports multi-spelling OR-groups and an optional denominator restriction. |
+| `scripts/author_aggregation.py` | "Who writes about X?" — `match_phrase` on a topic against any content index, aggregate by `author`, apply the standard junk-author filter (no team accounts, no email-as-byline, no domain-as-author, no Slashdot bots, no multi-author blobs), optionally exclude a domain denylist (e.g. the 333-domain coordinated content-farm network). Returns top authors with their per-author authority and primary domain. |
 
 Run any script with `--help` for usage details.
 
