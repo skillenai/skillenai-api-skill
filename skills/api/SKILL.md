@@ -519,6 +519,7 @@ The `scripts/` directory (at `${CLAUDE_PLUGIN_ROOT}/scripts/`) contains Python h
 | `scripts/entity_bridge_analysis.py` | Graph-native helpers: bridge-document density, co-required products in jobs, internal hiring stacks, top co-occurring entities. Uses Cypher. |
 | `scripts/phrase_prevalence.py` | "What fraction of jobs / blogs / news mention X?" for a long list of X. Packs many `match_phrase` concepts into one `filters` aggregation per request (chunked under the WAF body limit) so a 90-concept sweep is a handful of calls, not 90 per index. Supports multi-spelling OR-groups and an optional denominator restriction. |
 | `scripts/author_aggregation.py` | "Who writes about X?" — `match_phrase` on a topic against any content index, aggregate by `author`, apply the standard junk-author filter (no team accounts, no email-as-byline, no domain-as-author, no Slashdot bots, no multi-author blobs), optionally exclude a domain denylist (e.g. the 333-domain coordinated content-farm network). Returns top authors with their per-author authority and primary domain. |
+| `scripts/scrape_published_dates.py` | Recover real publication timestamps for a list of article URLs by scraping Open Graph (`article:published_time`), JSON-LD `datePublished`, schema.org microdata, HTML5 `<time pubdate>`, and Parse.ly tags. Use when index-level `publishedAt` is missing or rounded and the analysis needs minute/second resolution (e.g. diffusion timelines, launch-hour reconstruction). Parallel fetch, JSONL out. |
 
 Run any script with `--help` for usage details.
 
