@@ -375,6 +375,41 @@ python "$WRAP" POST /v1/resolution/entities \
 
 Use this to resolve skill names to entity IDs for `skill_boosts` in `/v1/jobs/search`.
 
+`mode: "fts"` expands a name into its family of related entities — useful for roles, which are fragmented into seniority/synonym variants (see Flow 11).
+
+---
+
+## Flow 11: Talent Graph — supply-side career flows & skills (`talent-graph`)
+
+The talent graph is the **supply side** (people and careers) that complements the demand-side postings. Entity-resolved, small-cell-suppressed rollups live at `/v1/talent-graph/*`:
+
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/api.py" GET /v1/talent-graph/endpoints | python3 -m json.tool
+```
+
+Key endpoints (required filter in parentheses):
+
+- `role-transitions-in` (`dst_role_id`) / `role-transitions-out` (`src_role_id`) — role→role moves (`n_moves` by `move_year`). The feeder/exit map.
+- `skill-prevalence` (`role_id`) — share of a role's people who list a skill (supply side); `skill-roles` (`skill_id`) — which roles require a skill.
+- `net-flow-by-role` (`company_id`) / `net-flow-by-company` (`role_id`) — `arrivals/departures/net_flow`. Note: both require a company scope, so there is no all-company role aggregate.
+- `company-transitions-in/out`, `company-signals`, `company-prestige`, `school-*`, `education-facets`.
+
+Endpoints take/return entity IDs; resolve names → IDs with Flow 9.
+
+The **`talent_graph.py`** client wraps the endpoints and handles two real gotchas — role fragmentation and name resolution:
+
+```bash
+TG="${CLAUDE_PLUGIN_ROOT}/scripts/talent_graph.py"
+python "$TG" endpoints
+python "$TG" family --type role --name "AI Engineer" --limit 20        # fts-expand the fragmented family, then curate
+python "$TG" transitions --direction in  --roles "AI Engineer,Applied AI Engineer,AI/ML Engineer" --top 12
+python "$TG" transitions --direction out --roles "AI Engineer" --top 12
+python "$TG" skill-prevalence --role "Data Scientist" --top 15
+```
+
+- **Roles are fragmented** — seniority/synonym variants (`AI Engineer`, `Senior AI Engineer`, `AI/ML Engineer`, `ML Engineer` vs `Machine Learning Engineer`) are separate role entities. Pass the whole family to `transitions` / `skill-prevalence`; the client aggregates them and drops within-family moves (a company change inside the family is not a feeder/exit).
+- **Supply vs demand skill gap** — put `skill-prevalence` (supply) next to a role's posting-required skills (demand: a nested `entities.resolved.entityId` aggregation on the jobs index with a `reverse_nested` for per-posting %). Both resolve to the same entity IDs, so align by ID — on-diagonal skills are aligned, demand-above are the emerging frontier, supply-above are legacy skills carried from prior roles.
+
 ---
 
 ## Flow 10: Alerts (`alerts` / "email me when …")
@@ -518,6 +553,7 @@ The `scripts/` directory (at `${CLAUDE_PLUGIN_ROOT}/scripts/`) contains Python h
 | `scripts/canonicalize_skills.py` | Collapse duplicate skill surface forms (case/punct/acronym variants) before aggregating |
 | `scripts/entity_bridge_analysis.py` | Graph-native helpers: bridge-document density, co-required products in jobs, internal hiring stacks, top co-occurring entities. Uses Cypher. |
 | `scripts/phrase_prevalence.py` | "What fraction of jobs / blogs / news mention X?" for a long list of X. Packs many `match_phrase` concepts into one `filters` aggregation per request (chunked under the WAF body limit) so a 90-concept sweep is a handful of calls, not 90 per index. Supports multi-spelling OR-groups and an optional denominator restriction. |
+| `scripts/talent_graph.py` | Talent-graph (supply-side) client: discover endpoints, resolve/fts-expand role families, aggregate role-to-role transitions (feeders/exits) and skill-prevalence across a role family. |
 | `scripts/skill_prevalence.py` | Entity-resolved companion to `phrase_prevalence.py`: "of the postings in cohort C, what fraction also *require* skill Y?" Counts structured skill entities (`entities.resolved`, entityType `skill`) rather than free-text mentions, so it measures genuine requirements. Define a cohort by role titles and/or required skill groups (AND across groups, OR within spelling variants) and a country/company filter; probes are measured with one document-level `filters` aggregation, chunked under the WAF body limit. Note: to avoid circularity, select the cohort on conceptual skills and probe for the specific skills separately. |
 | `scripts/mention_trends.py` | Time-series companion to `phrase_prevalence.py`: monthly mention *share* of a set of concepts on a content index, bucketed by `publishedAt` (excludes `ingested_fallback` dates). Returns a `month,total,<concept...>` CSV; compute share as concept/total to cancel crawl-volume/backfill bias. Use for "is mention of X rising vs Y over time?" Drop months with small `total` (pre-crawl-ramp noise). |
 | `scripts/author_aggregation.py` | "Who writes about X?" — `match_phrase` on a topic against any content index, aggregate by `author`, apply the standard junk-author filter (no team accounts, no email-as-byline, no domain-as-author, no Slashdot bots, no multi-author blobs), optionally exclude a domain denylist (e.g. the 333-domain coordinated content-farm network). Returns top authors with their per-author authority and primary domain. |
