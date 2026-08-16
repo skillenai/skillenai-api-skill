@@ -199,3 +199,47 @@ curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
 - Use `"size": 0` with `"aggs"` for pure aggregation queries (no document hits returned)
 - Entities are stored in a nested `entities` field — use `nested` queries/aggregations
 - Check `GET /v1/catalog/opensearch` for the full index mapping
+
+### Search behaviour worth knowing
+
+A few behaviours here differ from a raw OpenSearch cluster and will otherwise produce
+confident but wrong results.
+
+**`random_score` is not applied.** `function_score` with `random_score` returns the same
+documents regardless of seed — two different seeds yield identical `_id` lists, matching the
+unsorted query. Documents come back in internal index order, which clusters by ingest time
+and source, so it is *not* a random sample.
+
+To sample uniformly, sort on `documentId`. It is a hash of the source URL, distributed evenly
+and independent of source or date, so any contiguous slice of that order is an unbiased sample:
+
+```json
+{
+  "indices": ["prod-enriched-jobs"],
+  "query": {
+    "size": 500,
+    "from": 0,
+    "sort": [{"documentId": "asc"}],
+    "query": {"term": {"sourceType": "jobs"}}
+  }
+}
+```
+
+**`exists` does not mean "has content".** On text fields, a document whose value is an empty
+string still matches `exists`, so coverage can read 100% while the field is blank. And a
+misspelled or non-existent field simply returns 0% rather than an error — check the field name
+against `GET /v1/catalog/opensearch` before concluding the data is missing. For "does this
+document actually have prose", match common words instead:
+
+```json
+{"match": {"extractedText": {"query": "the and with", "operator": "or"}}}
+```
+
+**Measure depth, not just presence.** Coverage and usefulness are different questions: some
+documents carry a very short `extractedText` (little more than the job title), which counts as
+present. Pair any coverage figure with a length or element-count check on a sample.
+
+**`runtime_mappings` and script queries are rejected.** Compute derived values client-side.
+
+**`total` caps at 10,000.** Set `"track_total_hits": true`, or derive denominators by summing
+aggregation buckets — bucket counts stay exact even when `total` saturates.
