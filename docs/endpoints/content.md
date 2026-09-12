@@ -62,7 +62,7 @@ Query parameters:
 | `status` | str | One of `draft`, `pending_review`, `published`, `archived`. Anonymous callers always get `published`. |
 | `tag` | str | Tag slug filter. |
 | `category` | str | Category slug filter. |
-| `q` | str | Case-insensitive title search. |
+| `q` | str | Full-text search over title, excerpt and body. English-stemmed (`hiring` matches `hire`) and weighted so title matches rank above body-only matches. Supports quoted phrases (`"peer review"`) and `-negation`. When set, results are ordered by relevance instead of date. |
 | `limit` | int | 1–100 (default 20). |
 | `offset` | int | ≥ 0. |
 

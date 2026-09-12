@@ -80,7 +80,7 @@ python "$WRAP" GET "/content/posts?mine=true&status=draft" --host app
 python "$WRAP" GET "/content/posts?mine=true&status=pending_review" --host app
 python "$WRAP" GET "/content/posts?mine=true&status=published" --host app
 
-# Search by title
+# Full-text search (title, excerpt and body; most relevant first)
 python "$WRAP" GET "/content/posts?mine=true&q=tiptap" --host app
 ```
 
