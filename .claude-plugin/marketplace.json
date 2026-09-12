@@ -11,7 +11,7 @@
         "repo": "skillenai/skillenai-api-skill"
       },
       "description": "Skillenai Claude plugin \u2014 query the Data Products API, find jobs, and author blog posts using your Skillenai API key",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "author": {
         "name": "Jared Rand"
       },

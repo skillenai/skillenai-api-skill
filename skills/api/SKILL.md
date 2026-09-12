@@ -551,6 +551,7 @@ The `scripts/` directory (at `${CLAUDE_PLUGIN_ROOT}/scripts/`) contains Python h
 | `scripts/job_search.py` | Multi-signal job search with formatted output |
 | `scripts/download_jobs_paginated.py` | Paginated per-job download with arbitrary filter segments; handles 429 backoff |
 | `scripts/canonicalize_skills.py` | Collapse duplicate skill surface forms (case/punct/acronym variants) before aggregating |
+| `scripts/employer_concentration.py` | Is a role/segment bucket a market rate, or one company's internal ladder? Normalises fragmented employer names (`Anduril` / `Anduril Industries` / `andurilindustries` -> one key, plus ATS slugs like `ngc`/`bah`), then gates each bucket on distinct-employer count and top-employer share, and reports the median with the dominant employer removed. Run this before headlining ANY per-role statistic. Concentration measured on raw names is biased low: normalising flipped three role titles from passing a 25% gate to failing it. `--audit` shows which names merged (catches over-merging). Exits 1 if any bucket fails, so it works as a pipeline guard. |
 | `scripts/entity_bridge_analysis.py` | Graph-native helpers: bridge-document density, co-required products in jobs, internal hiring stacks, top co-occurring entities. Uses Cypher. |
 | `scripts/phrase_prevalence.py` | "What fraction of jobs / blogs / news mention X?" for a long list of X. Packs many `match_phrase` concepts into one `filters` aggregation per request (chunked under the WAF body limit) so a 90-concept sweep is a handful of calls, not 90 per index. Supports multi-spelling OR-groups and an optional denominator restriction. |
 | `scripts/talent_graph.py` | Talent-graph (supply-side) client: discover endpoints, resolve/fts-expand role families, aggregate role-to-role transitions (feeders/exits) and skill-prevalence across a role family. |
@@ -561,6 +562,8 @@ The `scripts/` directory (at `${CLAUDE_PLUGIN_ROOT}/scripts/`) contains Python h
 | `scripts/scrape_published_dates.py` | Recover real publication timestamps for a list of article URLs by scraping Open Graph (`article:published_time`), JSON-LD `datePublished`, schema.org microdata, HTML5 `<time pubdate>`, and Parse.ly tags. Use when index-level `publishedAt` is missing or rounded and the analysis needs minute/second resolution (e.g. diffusion timelines, launch-hour reconstruction). Parallel fetch, JSONL out. |
 
 Run any script with `--help` for usage details.
+
+**Before publishing any per-role or per-segment number** (pay, skill prevalence, counts), run `employer_concentration.py` on it. A bucket where one employer holds >25% is that employer's internal ladder, not a market rate — and because canonical employer names fragment across variants and unresolved ATS slugs, you must normalise names before measuring the share or you will under-detect.
 
 **Before aggregating skills by anything** (role, geo, seniority, time), pass per-job data through `canonicalize_skills.py` first. The entity resolver emits duplicate canonical names for skills like `RAG` vs `Retrieval-Augmented Generation (RAG)`, and aggregations will undercount or give contradictory signals otherwise.
 
