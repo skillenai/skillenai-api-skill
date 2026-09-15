@@ -5,7 +5,12 @@ seniority). Takes a YAML/JSON-like Python dict of segment definitions and pulls
 all matching jobs with metadata and resolved skills, writing one row per job.
 
 Handles 429 rate limits with exponential backoff. Default page size 100, sleeps
-~1.8s between pages to stay under the ~10 req/min QUERY tier.
+~1.4s between pages (~43 req/min) to stay under the measured 50 req/min QUERY tier (read
+`x-ratelimit-remaining` on any response to confirm the live policy).
+
+Result sets larger than 10,000 are partitioned on the documentId hash: the API
+silently returns duplicate pages past `from=10000` rather than erroring, so a
+naive walk would quietly truncate. Every fetch asserts unique-row recovery.
 
 Usage (as a library):
 
@@ -92,36 +97,99 @@ def extract_skills(entities) -> list[str]:
     })
 
 
+# OpenSearch `index.max_result_window`. The API does NOT raise past this -- it
+# silently returns duplicate pages, so a naive `from`-walk over a larger result
+# set yields exactly RESULT_WINDOW unique docs and looks like a clean success.
+RESULT_WINDOW = 10_000
+HEX = "0123456789abcdef"
+# The `query` tier is 50 req/min (read `x-ratelimit-policy` to confirm). Pacing at
+# the ceiling trips 429s once the per-shard count queries are added on top, so aim
+# at ~43 req/min. Measured 2026-09-14: 1.3s produced ~26 retried 429s on a 258-page
+# pull; the retries recover but cost ~40% wall-clock.
+PAGE_SLEEP = 1.4
+
+
+def _hex_shards(n_shards: int = 16) -> list[tuple[str, str]]:
+    """Split the documentId hash space into contiguous [lo, hi) hex ranges.
+
+    documentId is md5(sourceUrl), so it is uniform over the hex space: equal-width
+    ranges give equal-sized shards regardless of platform, role or date.
+    """
+    if n_shards <= 1:
+        return [("0", "g")]
+    step = len(HEX) // n_shards
+    edges = [HEX[i * step] for i in range(n_shards)] + ["g"]
+    return list(zip(edges[:-1], edges[1:]))
+
+
+def _walk_shard(query: dict, source_fields: list[str], lo: str, hi: str,
+                page_sleep: float) -> list[dict]:
+    """Page one documentId shard with a CURSOR, not an offset.
+
+    `from`-based paging silently caps at RESULT_WINDOW (the API returns 200 OK with
+    duplicate pages rather than erroring), so we advance a `documentId > last_seen`
+    cursor instead. That has no window ceiling and is resumable from the last id.
+    """
+    hits: list[dict] = []
+    cursor = None
+    while True:
+        rng = {"gte": lo, "lt": hi} if cursor is None else {"gt": cursor, "lt": hi}
+        q = json.loads(json.dumps(query))
+        q["bool"].setdefault("filter", []).append({"range": {"documentId": rng}})
+        page = api_search({"size": PAGE_SIZE, "query": q, "_source": source_fields,
+                           "sort": [{"documentId": "asc"}]}).get("hits", [])
+        if not page:
+            return hits
+        hits.extend(page)
+        nxt = page[-1].get("documentId") or page[-1].get("_id")
+        if not nxt or nxt == cursor:      # no forward progress: bail rather than spin
+            return hits
+        cursor = nxt
+        if len(page) < PAGE_SIZE:
+            return hits
+        time.sleep(page_sleep)
+
+
 def fetch_segment(
     segment_name: str,
     segment_def: dict,
     base_must: list,
     base_must_not: list,
     source_fields: list[str],
-    page_sleep: float = 1.8,
+    page_sleep: float = PAGE_SLEEP,
 ) -> list[dict]:
     must = base_must + segment_def.get("must", [])
     must_not = base_must_not + segment_def.get("must_not", [])
     query = {"bool": {"must": must, "must_not": must_not}}
-    body = {"size": PAGE_SIZE, "from": 0, "query": query, "_source": source_fields}
 
-    data = api_search(body)
-    total = data.get("total", 0)
+    total = api_search({"size": 0, "query": query, "track_total_hits": True}).get("total", 0)
     print(f"  {segment_name}: {total} jobs", file=sys.stderr, flush=True)
 
-    all_hits = data.get("hits", [])
-    offset = PAGE_SIZE
-    while offset < total:
-        body["from"] = offset
-        data = api_search(body)
-        all_hits.extend(data.get("hits", []))
-        offset += PAGE_SIZE
+    all_hits: list[dict] = []
+    shards = _hex_shards(1) if total <= RESULT_WINDOW else _hex_shards(16)
+    for lo, hi in shards:
+        all_hits.extend(_walk_shard(query, source_fields, lo, hi, page_sleep))
         time.sleep(page_sleep)
 
+    # The API returns 200 on over-window reads, so verify rather than trust.
+    unique = {h.get("documentId") or h.get("_id") for h in all_hits}
+    unique.discard(None)
+    if total and len(unique) < total * 0.99:
+        raise RuntimeError(
+            f"{segment_name}: recovered {len(unique):,} unique of {total:,} expected "
+            f"({100*len(unique)/total:.1f}%). Pagination truncated silently.")
+    print(f"    recovered {len(unique):,}/{total:,} unique "
+          f"({100*len(unique)/max(total,1):.1f}%)", file=sys.stderr, flush=True)
+
+    seen = set()
     rows = []
     for hit in all_hits:
         src = hit.get("source", hit)
-        row = {"segment": segment_name, "documentId": src.get("documentId") or hit.get("_id", "")}
+        did = src.get("documentId") or hit.get("_id", "")
+        if did in seen:
+            continue
+        seen.add(did)
+        row = {"segment": segment_name, "documentId": did}
         for fld in source_fields:
             if fld == "entities":
                 continue  # expanded into skills below
