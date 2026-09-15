@@ -111,9 +111,17 @@ class TalentGraph:
                 out[res["name"]] = cands[0]["entity_id"]
         return out
 
-    def resolve_family(self, name, entity_type, limit=25):
+    def resolve_family(self, name, entity_type, limit=20):
         """fts-expand a name into its family of related entities (for role families that are
-        fragmented into seniority/synonym variants). Returns [(entity_id, canonical_name, score)]."""
+        fragmented into seniority/synonym variants). Returns [(entity_id, canonical_name, score)].
+
+        NOTE: /v1/resolution/entities caps `limit` at 20 and 422s above it. 20 is
+        also NOT enough to see a whole role family — high-volume members can fall
+        below the cut (e.g. "Senior AI Engineer", "Senior ML Engineer" are absent
+        from the top-20 fts expansion of their own families). After calling this,
+        probe for the obvious missing seniority/synonym variants by exact name via
+        resolve() and add them, or the family — and every transition count built
+        from it — is silently short."""
         r = requests.post(f"{self.url}/v1/resolution/entities", headers=self.h,
                           data=json.dumps({"names": [{"name": name, "entity_type": entity_type}],
                                            "mode": "fts", "limit": limit}), timeout=90)
@@ -187,7 +195,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("endpoints")
     r = sub.add_parser("resolve"); r.add_argument("--type", required=True, choices=["role", "skill", "company"]); r.add_argument("--names", required=True)
-    fa = sub.add_parser("family"); fa.add_argument("--type", required=True, choices=["role", "skill", "company"]); fa.add_argument("--name", required=True); fa.add_argument("--limit", type=int, default=25)
+    fa = sub.add_parser("family"); fa.add_argument("--type", required=True, choices=["role", "skill", "company"]); fa.add_argument("--name", required=True); fa.add_argument("--limit", type=int, default=20, help="max 20 (API caps it; higher 422s)")
     t = sub.add_parser("transitions"); t.add_argument("--direction", choices=["in", "out"], default="in"); t.add_argument("--roles", required=True); t.add_argument("--top", type=int, default=15)
     s = sub.add_parser("skill-prevalence"); s.add_argument("--role", required=True); s.add_argument("--top", type=int, default=15)
     g = sub.add_parser("get"); g.add_argument("endpoint"); g.add_argument("--limit", type=int, default=1000); g.add_argument("filters", nargs="*", help="--filter value pairs, e.g. --dst_role_id <id>")
