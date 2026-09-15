@@ -549,7 +549,7 @@ The `scripts/` directory (at `${CLAUDE_PLUGIN_ROOT}/scripts/`) contains Python h
 | `scripts/skill_analysis.py` | Analyze skill demand by role, compare roles |
 | `scripts/trend_analysis.py` | Topic trend time series, growth analysis |
 | `scripts/job_search.py` | Multi-signal job search with formatted output |
-| `scripts/download_jobs_paginated.py` | Paginated per-job download with arbitrary filter segments; handles 429 backoff |
+| `scripts/download_jobs_paginated.py` | Full per-job download with arbitrary filter segments. Pages by `documentId` cursor, so it is **not** subject to the 10,000-row result window that `from`-based paging silently truncates at; asserts unique-row recovery; handles 429 backoff |
 | `scripts/canonicalize_skills.py` | Collapse duplicate skill surface forms (case/punct/acronym variants) before aggregating |
 | `scripts/employer_concentration.py` | Is a role/segment bucket a market rate, or one company's internal ladder? Normalises fragmented employer names (`Anduril` / `Anduril Industries` / `andurilindustries` -> one key, plus ATS slugs like `ngc`/`bah`), then gates each bucket on distinct-employer count and top-employer share, and reports the median with the dominant employer removed. Run this before headlining ANY per-role statistic. Concentration measured on raw names is biased low: normalising flipped three role titles from passing a 25% gate to failing it. `--audit` shows which names merged (catches over-merging). Exits 1 if any bucket fails, so it works as a pipeline guard. |
 | `scripts/entity_bridge_analysis.py` | Graph-native helpers: bridge-document density, co-required products in jobs, internal hiring stacks, top co-occurring entities. Uses Cypher. |
