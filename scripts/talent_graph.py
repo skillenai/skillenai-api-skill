@@ -15,7 +15,25 @@ Key endpoints (all filter-scoped; required filter in parentheses):
     skill-roles          (skill_id)      roles requiring a skill
     net-flow-by-role     (company_id)    company x role arrivals/departures/net_flow by flow_year
     net-flow-by-company  (role_id)       same, other axis
+    role-flows           (role_id)       a role's arrivals/departures across ALL employers
+    company-flows        (company_id)    a company's across ALL roles
     company-transitions-in/out, company-signals, company-prestige, school-*, education-facets
+
+Every dated endpoint above has a ``-monthly`` twin (``role-flows-monthly``,
+``role-transitions-in-monthly``, ...) exposing ``flow_month`` / ``move_month``
+beside the year. ``endpoints`` reports a ``grain`` of year/month/none per
+endpoint. Two things to know before using month grain:
+
+  * Month rows only cover source dates that STATE a month -- year-only dates are
+    excluded rather than imputed to January -- so month rows do NOT sum to the
+    year row. Use the year endpoint for totals.
+  * Coverage is ~2/3 of dated positions and moves and rises with recency, so a
+    month series thins out the further back it reaches.
+
+Do NOT sum ``net-flow-by-role`` over companies to get a role total: the measures
+are distinct-person counts, so that double-counts anyone who held the role at
+two employers (~3% corpus-wide, up to ~13% for an individual role). Use
+``role-flows``, which counts the person once.
 
 The endpoints take/return entity IDs, not names. Forward name->ID resolution uses
 ``/v1/resolution/entities`` (this client does it for you). Reverse ID->name (naming
